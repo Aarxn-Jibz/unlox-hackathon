@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { User, GraduationCap, Calendar, Phone, Mail, ArrowRight } from 'lucide-react';
+import api from '../services/api';
 
 interface OnboardingData {
   name: string;
@@ -41,7 +42,6 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
     setLoading(true);
 
     try {
-      const token = localStorage.getItem('campus_token');
       const yearToSemester: Record<string, number> = {
         '1st Year': 1,
         '2nd Year': 3,
@@ -50,23 +50,11 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
       };
       const semester = yearToSemester[year] || 1;
 
-      const response = await fetch('/onboard', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          branch,
-          semester,
-          attendanceTarget: 75,
-        }),
+      await api.put('/onboard', {
+        branch,
+        semester,
+        attendanceTarget: 75,
       });
-
-      if (!response.ok) {
-        const errorData = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(errorData.error || 'Failed to update onboarding profile');
-      }
 
       setLoading(false);
       localStorage.removeItem('temp_signup_name');
@@ -86,7 +74,8 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
       onComplete(studentData);
     } catch (err) {
       setLoading(false);
-      setError((err as Error).message || 'Failed to complete onboarding');
+      const msg = (err as any).response?.data?.error || (err as Error).message || 'Failed to complete onboarding';
+      setError(msg);
     }
   };
 

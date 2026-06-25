@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Lock, Mail, User, ShieldAlert } from 'lucide-react';
+import api from '../services/api';
 
 interface AuthProps {
   onAuthSuccess: (token: string, needsOnboarding: boolean) => void;
@@ -33,18 +34,12 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
     setLoading(true);
 
     try {
-      const response = await fetch('/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: loginEmail, password: loginPassword }),
+      const response = await api.post('/login', {
+        email: loginEmail,
+        password: loginPassword,
       });
 
-      if (!response.ok) {
-        const errData = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(errData.error || 'Invalid email or password');
-      }
-
-      const data = (await response.json()) as {
+      const data = response.data as {
         token: string;
         user: {
           name: string;
@@ -89,7 +84,8 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
       onAuthSuccess(data.token, needsOnboarding);
     } catch (err) {
       setLoading(false);
-      setError((err as Error).message || 'Invalid email or password');
+      const msg = (err as any).response?.data?.error || (err as Error).message || 'Invalid email or password';
+      setError(msg);
     }
   };
 
@@ -113,18 +109,13 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
     setLoading(true);
 
     try {
-      const response = await fetch('/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: signupName, email: signupEmail, password: signupPassword }),
+      const response = await api.post('/signup', {
+        name: signupName,
+        email: signupEmail,
+        password: signupPassword,
       });
 
-      if (!response.ok) {
-        const errData = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(errData.error || 'Failed to sign up');
-      }
-
-      const data = (await response.json()) as {
+      const data = response.data as {
         token: string;
         user: { name: string; email: string };
       };
@@ -142,7 +133,8 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
       onAuthSuccess(data.token, true);
     } catch (err) {
       setLoading(false);
-      setError((err as Error).message || 'Failed to sign up');
+      const msg = (err as any).response?.data?.error || (err as Error).message || 'Failed to sign up';
+      setError(msg);
     }
   };
 
