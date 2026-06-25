@@ -7,12 +7,12 @@ compatibility_date = "2024-03-03"
 [[d1_databases]]
 binding = "DB"
 database_name = "campusflow-db"
-database_id = "00000000-0000-0000-0000-000000000000" # Local and remote fallback UUID
+database_id = "810ea872-2b35-42a6-8801-1f4cfab1d2c1" # Local and remote fallback UUID
 
 [[r2_buckets]]
-binding = "BUCKET"
+binding = "campusflow_bucket"
 bucket_name = "campusflow-bucket"
 
 [[vectorize]]
-binding = "VECTOR_INDEX"
+binding = "VECTORIZE"
 index_name = "campusflow-index"

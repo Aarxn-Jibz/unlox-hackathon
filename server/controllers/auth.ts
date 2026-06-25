@@ -2,6 +2,7 @@ import type { Context } from 'hono';
 import { sign } from 'hono/jwt';
 import { getUserByEmail, createUser, mapToUserProfile, updateUserOnboarding } from '../models/user';
 import type { LoginRequest, SignupRequest, UserOnboarding } from '../../types';
+import { hashPassword, verifyPassword } from '../lib/crypto';
 
 export async function handleSignup(c: Context) {
   try {
@@ -17,10 +18,8 @@ export async function handleSignup(c: Context) {
       return c.json({ error: 'User with this email already exists' }, 400);
     }
 
-    // Secure password hashing with Bun native API
-    const passwordHash = await Bun.password.hash(body.password, {
-      algorithm: 'bcrypt',
-    });
+    // Secure password hashing with Web Crypto PBKDF2 helper
+    const passwordHash = await hashPassword(body.password);
 
     const userId = crypto.randomUUID();
     const userProfile = await createUser(db, userId, body.email, passwordHash, body.name);
@@ -61,8 +60,8 @@ export async function handleLogin(c: Context) {
       return c.json({ error: 'Invalid email or password' }, 401);
     }
 
-    // Secure password verification with Bun native API
-    const isPasswordCorrect = await Bun.password.verify(body.password, dbUser.password_hash);
+    // Secure password verification with Web Crypto PBKDF2 helper
+    const isPasswordCorrect = await verifyPassword(body.password, dbUser.password_hash);
     if (!isPasswordCorrect) {
       return c.json({ error: 'Invalid email or password' }, 401);
     }
