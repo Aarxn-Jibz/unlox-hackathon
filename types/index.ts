@@ -188,4 +188,5 @@ export interface Env {
   JWT_SECRET?: string;
   ALLOWED_ORIGINS?: string;
   TELEGRAM_BOT_TOKEN?: string;
+  GEMINI_API_KEY?: string;
 }

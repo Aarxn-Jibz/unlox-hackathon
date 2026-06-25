@@ -2,7 +2,9 @@ import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/auth';
 import { parseTimetable } from '../services/vision';
 
-const bunkRoutes = new Hono<{ Variables: { userId: string } }>();
+import type { Env } from '../../types';
+
+const bunkRoutes = new Hono<{ Bindings: Env; Variables: { userId: string } }>();
 
 interface TimetableSubject {
   subjectName?: string;
