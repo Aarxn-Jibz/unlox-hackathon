@@ -303,9 +303,11 @@ export async function createPlacementAttempt(
 export interface Deadline {
   id: string;
   userId: string;
+  subject: string;
   title: string;
   description?: string;
   dueDate: string;
+  dueTime: string;
   status: 'pending' | 'completed';
   createdAt: string;
   updatedAt: string;
@@ -320,11 +322,50 @@ export async function getDeadlinesByUserId(db: D1Database, userId: string): Prom
   return (results || []).map((row) => ({
     id: row.id,
     userId: row.user_id,
+    subject: (row as any).subject || '',
     title: row.title,
     description: row.description || undefined,
     dueDate: row.due_date,
+    dueTime: (row as any).due_time || '12:00',
     status: row.status as 'pending' | 'completed',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
+}
+
+export async function createDeadline(
+  db: D1Database,
+  userId: string,
+  dto: {
+    subject: string;
+    title: string;
+    description?: string;
+    dueDate: string;
+    dueTime?: string;
+  },
+): Promise<Deadline> {
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const dueTime = dto.dueTime || '12:00';
+
+  await db
+    .prepare(
+      `INSERT INTO deadlines (id, user_id, subject, title, description, due_date, due_time, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+    )
+    .bind(id, userId, dto.subject, dto.title, dto.description || null, dto.dueDate, dueTime, now, now)
+    .run();
+
+  return {
+    id,
+    userId,
+    subject: dto.subject,
+    title: dto.title,
+    description: dto.description,
+    dueDate: dto.dueDate,
+    dueTime,
+    status: 'pending',
+    createdAt: now,
+    updatedAt: now,
+  };
 }

@@ -9,8 +9,12 @@ import {
   getPlacementAttemptsByUserId,
   createPlacementAttempt,
   getDeadlinesByUserId,
+  createDeadline,
 } from '../models/academic';
 import type { BunkCalcInput, BunkCalcOutput, NoticePayload, NoticeSummary } from '../../types';
+
+// n8n webhook URL for Google Calendar automation
+const N8N_WEBHOOK_URL = 'https://campusflow-n8n.onrender.com/webhook/create-event';
 
 // Tasks Controllers
 export async function handleGetTasks(c: Context) {
@@ -235,6 +239,45 @@ export async function handleGetDeadlines(c: Context) {
     const userPayload = c.get('jwtPayload') as { id: string };
     const deadlines = await getDeadlinesByUserId(db, userPayload.id);
     return c.json({ deadlines });
+  } catch (error) {
+    return c.json({ error: (error as Error).message || 'Internal Server Error' }, 500);
+  }
+}
+
+export async function handleCreateDeadline(c: Context) {
+  try {
+    const db = c.env.DB as D1Database;
+    const userPayload = c.get('jwtPayload') as { id: string; email?: string; googleAccount?: string };
+    const body = await c.req.json();
+
+    if (!body.subject || !body.title || !body.dueDate) {
+      return c.json({ error: 'subject, title, and dueDate are required' }, 400);
+    }
+
+    // 1. Save deadline to D1 database
+    const deadline = await createDeadline(db, userPayload.id, {
+      subject: body.subject,
+      title: body.title,
+      description: body.description,
+      dueDate: body.dueDate,
+      dueTime: body.dueTime || '12:00',
+    });
+
+    // 2. Fire n8n webhook to create a Google Calendar event (non-blocking, best-effort)
+    const calendarId = body.calendarId || userPayload.googleAccount || userPayload.email || 'primary';
+    fetch(N8N_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        calendarId,
+        subject: body.subject,
+        title: body.title,
+        date: body.dueDate,
+        time: body.dueTime || '12:00',
+      }),
+    }).catch((err) => console.warn('[n8n] Calendar webhook failed:', err));
+
+    return c.json({ deadline }, 201);
   } catch (error) {
     return c.json({ error: (error as Error).message || 'Internal Server Error' }, 500);
   }

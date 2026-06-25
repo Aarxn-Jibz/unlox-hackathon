@@ -11,6 +11,7 @@ import {
   handleGetPlacementAttempts,
   handleCreatePlacementAttempt,
   handleGetDeadlines,
+  handleCreateDeadline,
 } from '../controllers/academic';
 
 const academicRouter = new Hono();
@@ -34,6 +35,7 @@ academicRouter.post('/placements', authMiddleware, handleCreatePlacementAttempt)
 
 // Protected Deadlines API
 academicRouter.get('/deadlines', authMiddleware, handleGetDeadlines);
+academicRouter.post('/deadlines', authMiddleware, handleCreateDeadline);
 
 // Notice Summarizer (Can be public or protected; let's keep it public for easy integration/testing)
 academicRouter.post('/notices/summarize', handleSummarizeNotice);

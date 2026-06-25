@@ -166,52 +166,80 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
     setTasks(tasks.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t)));
   };
 
-  const createDeadline = (e: React.FormEvent) => {
+  const createDeadline = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newDeadlineSubject || !newDeadlineTitle || !newDeadlineDate) return;
 
+    // Optimistically update UI immediately
+    const tempId = Date.now().toString();
     const newDL = {
-      id: Date.now().toString(),
+      id: tempId,
       subject: newDeadlineSubject,
       title: newDeadlineTitle,
       date: newDeadlineDate,
       time: newDeadlineTime || '12:00',
     };
+    setDeadlines((prev) => [...prev, newDL]);
 
-    setDeadlines([...deadlines, newDL]);
+    // Update automations log
+    const pendingAuto = {
+      id: Math.random().toString(),
+      name: `Google Calendar Sync: ${newDL.subject} — ${newDL.title}`,
+      type: 'Calendar',
+      status: 'pending' as const,
+      time: 'Just now',
+    };
+    setAutomations((prev) => [pendingAuto, ...prev]);
 
-    // Create Automations Events (n8n execution mocks)
-    const newAutos = [
-      {
-        id: Math.random().toString(),
-        name: `Telegram Notification: ${newDL.subject} - ${newDL.title}`,
-        type: 'Telegram',
-        status: 'success' as const,
-        time: 'Just now',
-      },
-      {
-        id: Math.random().toString(),
-        name: `Google Calendar Sync: ${newDL.subject}`,
-        type: 'Calendar',
-        status: 'success' as const,
-        time: 'Just now',
-      },
-      {
-        id: Math.random().toString(),
-        name: `Reminder schedule (1h prior to deadline)`,
-        type: 'Reminder',
-        status: 'pending' as const,
-        time: 'Pending',
-      },
-    ];
-
-    setAutomations((prev) => [newAutos[0], newAutos[1], newAutos[2], ...prev]);
-
-    // Reset forms
+    // Reset form fields immediately
     setNewDeadlineSubject('');
     setNewDeadlineTitle('');
     setNewDeadlineDate('');
     setNewDeadlineTime('');
+
+    try {
+      // POST to backend — which saves to D1 and fires n8n → Google Calendar
+      const token = localStorage.getItem('campus_token');
+      const res = await fetch('/api/academic/deadlines', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          subject: newDL.subject,
+          title: newDL.title,
+          dueDate: newDL.date,
+          dueTime: newDL.time,
+          calendarId: studentInfo.googleAccount || 'primary',
+        }),
+      });
+
+      if (res.ok) {
+        const data = (await res.json()) as any;
+        // Swap temp id with real DB id
+        setDeadlines((prev) =>
+          prev.map((d) => (d.id === tempId ? { ...d, id: data.deadline?.id || tempId } : d)),
+        );
+        // Update automation log to success
+        setAutomations((prev) =>
+          prev.map((a) =>
+            a.id === pendingAuto.id
+              ? { ...a, status: 'success' as const, name: `Google Calendar Sync: ${newDL.subject} — ${newDL.title}` }
+              : a,
+          ),
+        );
+      } else {
+        throw new Error('Server error');
+      }
+    } catch {
+      // Mark automation as failed but keep deadline in UI
+      setAutomations((prev) =>
+        prev.map((a) =>
+          a.id === pendingAuto.id ? { ...a, status: 'failed' as const } : a,
+        ),
+      );
+    }
   };
 
   const deleteDeadline = (id: string) => {
