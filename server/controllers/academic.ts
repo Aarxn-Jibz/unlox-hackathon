@@ -1,4 +1,5 @@
 import type { Context } from 'hono';
+import { getGeminiClient } from '../lib/gemini-client';
 import {
   getTasksByUserId,
   createTask,
@@ -139,9 +140,46 @@ export async function handleSummarizeNotice(c: Context) {
       return c.json({ error: 'Title and content are required' }, 400);
     }
 
+    const apiKey = c.env?.GEMINI_API_KEY;
+    if (apiKey) {
+      try {
+        const genAI = getGeminiClient(apiKey);
+        const model = genAI.getGenerativeModel({
+          model: 'gemini-2.5-flash',
+          generationConfig: { responseMimeType: 'application/json' },
+        });
+
+        const promptText = `
+You are a university notice summarization assistant.
+Analyze the following notice:
+Title: ${body.title}
+Content: ${body.content}
+
+Generate a structured JSON response matching the following schema:
+{
+  "originalTitle": "${body.title}",
+  "summary": "Brief summary of the notice context.",
+  "actionItems": ["List of actionable tasks required from the student"],
+  "keyDates": [{"event": "Event name", "date": "Date mentioned or relative deadline"}],
+  "urgency": "low" | "medium" | "high"
+}
+`;
+
+        const result = await model.generateContent(promptText);
+        const responseText = result.response.text();
+
+        if (responseText) {
+          const parsed = JSON.parse(responseText);
+          return c.json(parsed);
+        }
+      } catch (err) {
+        console.error('Gemini Notice Summarizer failed, falling back to heuristics:', err);
+      }
+    }
+
     const contentLower = body.content.toLowerCase();
 
-    // Simple heuristic parser for mock notice summarization
+    // Simple heuristic parser fallback
     const actionItems: string[] = [];
     const keyDates: { event: string; date: string }[] = [];
     let urgency: 'low' | 'medium' | 'high' = 'low';

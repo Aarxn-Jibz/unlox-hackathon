@@ -1,84 +1,89 @@
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/auth';
+import { TaskRepository } from '../models/tasks';
+import type { Env } from '../../types';
 
-const tasksRoutes = new Hono<{ Variables: { userId: string } }>();
+const tasksRoutes = new Hono<{ Bindings: Env; Variables: { userId: string } }>();
 
 tasksRoutes.use('/*', authMiddleware);
 
-tasksRoutes.get('/', (c) => {
-  const userId = c.get('userId');
-  return c.json(
-    {
-      success: true,
-      userId,
-      tasks: [
-        {
-          id: 'mock-task-1',
-          title: 'Mock Task 1',
-          description: 'Complete the backend implementation',
-          status: 'todo',
-          priority: 'high',
-          dueDate: new Date().toISOString(),
-        },
-      ],
-    },
-    200,
-  );
+tasksRoutes.get('/', async (c) => {
+  try {
+    const userId = c.get('userId');
+    const repo = new TaskRepository(c.env.DB);
+    const tasks = await repo.findByUserId(userId);
+    return c.json({ success: true, tasks }, 200);
+  } catch (err) {
+    return c.json({ success: false, error: (err as Error).message }, 500);
+  }
 });
 
 tasksRoutes.post('/', async (c) => {
-  const userId = c.get('userId');
-  const body = await c.req.json();
-  return c.json(
-    {
-      success: true,
-      task: {
-        id: crypto.randomUUID(),
-        userId,
-        title: body.title || 'Untitled Task',
-        description: body.description || '',
-        status: body.status || 'todo',
-        priority: body.priority || 'medium',
-        dueDate: body.dueDate || null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-    },
-    200,
-  );
+  try {
+    const userId = c.get('userId');
+    const body = await c.req.json();
+    if (!body.title) {
+      return c.json({ success: false, error: 'title is required' }, 400);
+    }
+
+    const repo = new TaskRepository(c.env.DB);
+    const task = await repo.create(userId, {
+      title: body.title,
+      description: body.description,
+      dueDate: body.dueDate,
+      status: body.status || 'todo',
+      priority: body.priority || 'medium',
+    });
+
+    return c.json({ success: true, task }, 200);
+  } catch (err) {
+    return c.json({ success: false, error: (err as Error).message }, 500);
+  }
 });
 
 tasksRoutes.put('/:id', async (c) => {
-  const id = c.req.param('id');
-  const userId = c.get('userId');
-  const body = await c.req.json();
-  return c.json(
-    {
-      success: true,
-      task: {
-        id,
-        userId,
-        title: body.title,
-        description: body.description,
-        status: body.status,
-        priority: body.priority,
-        dueDate: body.dueDate,
-        updatedAt: new Date().toISOString(),
+  try {
+    const id = c.req.param('id');
+    const userId = c.get('userId');
+    const body = await c.req.json();
+
+    const repo = new TaskRepository(c.env.DB);
+    const success = await repo.update(userId, id, body);
+    if (!success) {
+      return c.json({ success: false, error: 'Task not found or update failed' }, 404);
+    }
+
+    return c.json(
+      {
+        success: true,
+        task: {
+          id,
+          userId,
+          ...body,
+        },
       },
-    },
-    200,
-  );
+      200,
+    );
+  } catch (err) {
+    return c.json({ success: false, error: (err as Error).message }, 500);
+  }
 });
 
-tasksRoutes.delete('/:id', (c) => {
-  const id = c.req.param('id');
-  return c.json(
-    {
-      success: true,
-      message: `Task ${id} deleted successfully`,
-    },
-    200,
-  );
+tasksRoutes.delete('/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const userId = c.get('userId');
+
+    const repo = new TaskRepository(c.env.DB);
+    const success = await repo.delete(userId, id);
+    if (!success) {
+      return c.json({ success: false, error: 'Task not found or deletion failed' }, 404);
+    }
+
+    return c.json({ success: true, message: `Task ${id} deleted successfully` }, 200);
+  } catch (err) {
+    return c.json({ success: false, error: (err as Error).message }, 500);
+  }
 });
 
 export default tasksRoutes;

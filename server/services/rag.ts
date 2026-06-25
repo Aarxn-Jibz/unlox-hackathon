@@ -30,7 +30,7 @@ export interface RAGAnswerResponse {
  * @param fileBuffer - The PDF file binary buffer.
  * @returns The extracted text content.
  */
-async function extractTextFromPdf(fileBuffer: ArrayBuffer | Buffer): Promise<string> {
+export async function extractTextFromPdf(fileBuffer: ArrayBuffer | Buffer): Promise<string> {
   const nodeBuffer = Buffer.isBuffer(fileBuffer)
     ? fileBuffer
     : Buffer.from(fileBuffer as ArrayBuffer);

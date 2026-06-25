@@ -1,7 +1,9 @@
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/auth';
+import { matchResumeVsJD } from '../services/placement';
+import type { Env } from '../../types';
 
-const placementRoutes = new Hono();
+const placementRoutes = new Hono<{ Bindings: Env }>();
 
 placementRoutes.use('/*', authMiddleware);
 
@@ -12,31 +14,26 @@ placementRoutes.post('/analyze', async (c) => {
       return c.json({ success: false, error: 'resumeText and jobDescription are required' }, 400);
     }
 
-    const jdKeywords = jobDescription.toLowerCase().match(/\b\w{3,15}\b/g) || [];
-    const resumeWords = new Set(resumeText.toLowerCase().match(/\b\w{3,15}\b/g) || []);
+    const apiKey = c.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return c.json({ success: false, error: 'GEMINI_API_KEY environment variable is missing' }, 500);
+    }
 
-    const uniqueJDKeywords = Array.from(new Set<string>(jdKeywords)).filter(
-      (word: string) =>
-        !['and', 'the', 'for', 'with', 'you', 'are', 'this', 'that', 'our', 'their'].includes(word),
-    );
-
-    const matched = uniqueJDKeywords.filter((word) => resumeWords.has(word));
-    const score =
-      uniqueJDKeywords.length > 0
-        ? Math.round((matched.length / uniqueJDKeywords.length) * 100)
-        : 0;
+    const result = await matchResumeVsJD(apiKey, resumeText, jobDescription);
 
     return c.json(
       {
         success: true,
         analysis: {
-          score,
-          matchedKeywords: matched.slice(0, 10),
-          missingKeywords: uniqueJDKeywords.filter((word) => !resumeWords.has(word)).slice(0, 10),
+          score: result.matchPercentage,
+          matchPercentage: result.matchPercentage,
+          missingKeywords: result.missingKeywords,
+          improvementTips: result.improvementTips,
           feedback:
-            score > 70
+            result.improvementTips.join('\n') ||
+            (result.matchPercentage > 70
               ? 'Strong resume match! Keep polishing formatting.'
-              : 'Consider adding more keywords matching the job description to improve selection chance.',
+              : 'Consider adding more keywords matching the job description to improve selection chance.'),
         },
       },
       200,

@@ -185,6 +185,8 @@ export type CreateAutomationLogDTO = Omit<AutomationLog, 'id' | 'createdAt'>;
 // Environment bindings for cloudflare workers
 export interface Env {
   DB: D1Database;
+  campusflow_bucket: R2Bucket;
+  VECTORIZE: VectorizeIndex;
   JWT_SECRET?: string;
   ALLOWED_ORIGINS?: string;
   TELEGRAM_BOT_TOKEN?: string;

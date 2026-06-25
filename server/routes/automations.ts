@@ -1,35 +1,21 @@
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/auth';
+import { AutomationRepository } from '../models/automations';
+import type { Env } from '../../types';
 
-const automationsRoutes = new Hono<{ Variables: { userId: string } }>();
+const automationsRoutes = new Hono<{ Bindings: Env; Variables: { userId: string } }>();
 
 automationsRoutes.use('/*', authMiddleware);
 
-automationsRoutes.get('/logs', (c) => {
-  return c.json(
-    {
-      success: true,
-      logs: [
-        {
-          id: 'mock-log-1',
-          userId: c.get('userId'),
-          integrationType: 'calendar',
-          status: 'success',
-          details: 'Successfully synced 3 deadlines to Google Calendar',
-          createdAt: new Date(Date.now() - 3600000).toISOString(),
-        },
-        {
-          id: 'mock-log-2',
-          userId: c.get('userId'),
-          integrationType: 'telegram',
-          status: 'success',
-          details: 'Broadcast notice to channel @campus_flow_alerts',
-          createdAt: new Date(Date.now() - 7200000).toISOString(),
-        },
-      ],
-    },
-    200,
-  );
+automationsRoutes.get('/logs', async (c) => {
+  try {
+    const userId = c.get('userId');
+    const repo = new AutomationRepository(c.env.DB);
+    const logs = await repo.findByUserId(userId);
+    return c.json({ success: true, logs }, 200);
+  } catch (err) {
+    return c.json({ success: false, error: (err as Error).message }, 500);
+  }
 });
 
 export default automationsRoutes;

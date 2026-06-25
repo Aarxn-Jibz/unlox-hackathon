@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/auth';
 import { parseTimetable } from '../services/vision';
-
+import { BunkService } from '../services/bunk';
 import type { Env } from '../../types';
 
 const bunkRoutes = new Hono<{ Bindings: Env; Variables: { userId: string } }>();
@@ -57,16 +57,40 @@ bunkRoutes.post('/presigned-url', async (c) => {
 
     const fileName = body.fileName || 'timetable.png';
     const key = `timetable/${c.get('userId')}/${Date.now()}-${fileName}`;
-    const mockUrl = `https://mock-r2-bucket.r2.cloudflarestorage.com/${key}?signature=mock-signature-12345`;
+    const uploadUrl = `${new URL(c.req.url).origin}/api/bunk/upload?key=${encodeURIComponent(key)}`;
 
     return c.json(
       {
         success: true,
-        uploadUrl: mockUrl,
+        uploadUrl,
         key,
       },
       200,
     );
+  } catch (err) {
+    return c.json({ success: false, error: (err as Error).message }, 500);
+  }
+});
+
+bunkRoutes.put('/upload', async (c) => {
+  try {
+    const key = c.req.query('key');
+    if (!key) {
+      return c.json({ success: false, error: 'key is required' }, 400);
+    }
+
+    const body = await c.req.arrayBuffer();
+    if (!body || body.byteLength === 0) {
+      return c.json({ success: false, error: 'File content is empty' }, 400);
+    }
+
+    await c.env.campusflow_bucket.put(key, body, {
+      httpMetadata: {
+        contentType: c.req.header('Content-Type') || 'image/png',
+      },
+    });
+
+    return c.json({ success: true, key }, 200);
   } catch (err) {
     return c.json({ success: false, error: (err as Error).message }, 500);
   }
@@ -81,6 +105,21 @@ bunkRoutes.post('/timetable', async (c) => {
       return c.json({ success: false, error: 'name and r2Key are required' }, 400);
     }
 
+    const apiKey = c.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return c.json({ success: false, error: 'GEMINI_API_KEY environment variable is missing' }, 500);
+    }
+
+    const fileObj = await c.env.campusflow_bucket.get(r2Key);
+    if (!fileObj) {
+      return c.json({ success: false, error: 'Uploaded timetable image not found in storage' }, 404);
+    }
+
+    const fileBuffer = await fileObj.arrayBuffer();
+    const mimeType = fileObj.httpMetadata?.contentType || 'image/png';
+
+    const parsed = await parseTimetable(apiKey, fileBuffer, mimeType);
+
     return c.json(
       {
         success: true,
@@ -92,6 +131,7 @@ bunkRoutes.post('/timetable', async (c) => {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
+        subjects: parsed.subjects,
       },
       200,
     );
@@ -109,48 +149,29 @@ bunkRoutes.post('/calculate', async (c) => {
       return c.json({ success: false, error: 'subjects array is required' }, 400);
     }
 
-    const results = subjects.map((sub: TimetableSubject) => {
-      const target = sub.targetPercentage || 75;
-      const attended = sub.attended || 0;
-      const total = sub.total || 0;
+    const inputs = subjects.map((sub: TimetableSubject) => ({
+      subjectName: sub.subjectName || 'Unknown Subject',
+      attended: sub.attended || 0,
+      total: sub.total || 0,
+      targetPercentage: sub.targetPercentage || 75,
+    }));
 
-      const currentPct = total > 0 ? (attended / total) * 100 : 0;
-
-      let bunksPossible = 0;
-      let classesToAttend = 0;
-
-      if (currentPct >= target) {
-        bunksPossible = Math.floor((attended * 100) / target - total);
-        if (bunksPossible < 0) bunksPossible = 0;
-      } else {
-        if (target < 100) {
-          classesToAttend = Math.ceil((target * total - 100 * attended) / (100 - target));
-        } else {
-          classesToAttend = 999;
-        }
-        if (classesToAttend < 0) classesToAttend = 0;
-      }
-
-      return {
-        subjectName: sub.subjectName || 'Unknown Subject',
-        attended,
-        total,
-        targetPercentage: target,
-        percentage: Number(currentPct.toFixed(2)),
-        bunksPossible,
-        classesToAttend,
-      };
-    });
+    const results = BunkService.analyzeRisk(inputs);
 
     const overallAttended = results.reduce((sum, r) => sum + r.attended, 0);
     const overallTotal = results.reduce((sum, r) => sum + r.total, 0);
     const overallPercentage =
       overallTotal > 0 ? Number(((overallAttended / overallTotal) * 100).toFixed(2)) : 0;
 
+    const formattedResults = results.map((r) => ({
+      ...r,
+      percentage: Number(r.percentage.toFixed(2)),
+    }));
+
     return c.json(
       {
         success: true,
-        subjects: results,
+        subjects: formattedResults,
         overallPercentage,
       },
       200,
