@@ -23,6 +23,9 @@ import {
   User,
   ChevronLeft,
   ChevronRight,
+  CalendarCheck,
+  Copy,
+  ExternalLink,
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -41,6 +44,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const chatContainerRef = React.useRef<HTMLDivElement>(null);
+
+  // Calendar connection state — persisted in localStorage per user
+  const calendarStorageKey = `campus_cal_connected_${studentInfo.googleAccount}`;
+  const [calendarConnected, setCalendarConnected] = useState(
+    () => localStorage.getItem(calendarStorageKey) === 'true',
+  );
+  const [copiedEmail, setCopiedEmail] = useState(false);
+  const DISPATCHER_EMAIL = 'jj2006ad@gmail.com';
+
+  const handleCopyEmail = () => {
+    navigator.clipboard.writeText(DISPATCHER_EMAIL);
+    setCopiedEmail(true);
+    setTimeout(() => setCopiedEmail(false), 2000);
+  };
+
+  const handleMarkConnected = () => {
+    localStorage.setItem(calendarStorageKey, 'true');
+    setCalendarConnected(true);
+  };
   // --- Core Platform States ---
   const [tasks, setTasks] = useState<{ id: string; title: string; completed: boolean }[]>([]);
   const [newTaskTitle, setNewTaskTitle] = useState('');
@@ -718,7 +740,48 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
               </div>
             </div>
 
-            {/* Task Manager & Deadline CRUD Grid */}
+            {/* ── Google Calendar Connection Banner ── */}
+            {!calendarConnected && (
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 border border-blue-500/25 rounded-xl p-4 shadow-sm">
+                <div className="flex items-center gap-3 flex-1">
+                  <div className="w-9 h-9 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
+                    <CalendarCheck className="w-5 h-5 text-blue-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-foreground">Connect your Google Calendar</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Share your calendar with <span className="font-mono font-semibold text-blue-400">{DISPATCHER_EMAIL}</span> to auto-sync deadlines.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                  <button
+                    onClick={handleCopyEmail}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-card border border-border/80 hover:border-blue-400/50 rounded-lg text-xs font-medium text-foreground transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  >
+                    {copiedEmail ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copiedEmail ? 'Copied!' : 'Copy Email'}
+                  </button>
+                  <a
+                    href="https://calendar.google.com/calendar/r/settings/sharepeople"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition-all hover:scale-[1.02] active:scale-[0.98] shadow"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    Open Calendar Settings
+                  </a>
+                  <button
+                    onClick={handleMarkConnected}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500/10 border border-green-500/30 hover:bg-green-500/20 text-green-400 rounded-lg text-xs font-bold transition-all"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    Done
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               {/* Task list and Deadline CRUD */}
               <div className="lg:col-span-8 space-y-6">
