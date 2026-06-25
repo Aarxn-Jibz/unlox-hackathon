@@ -42,31 +42,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const chatContainerRef = React.useRef<HTMLDivElement>(null);
   // --- Core Platform States ---
-  const [tasks, setTasks] = useState<{ id: string; title: string; completed: boolean }[]>([
-    { id: '1', title: 'Revise Machine Learning Chapter 3', completed: false },
-    { id: '2', title: 'Submit Compiler Design Timetable', completed: true },
-    { id: '3', title: 'Complete Placement Prep Mock Test', completed: false },
-  ]);
+  const [tasks, setTasks] = useState<{ id: string; title: string; completed: boolean }[]>([]);
   const [newTaskTitle, setNewTaskTitle] = useState('');
 
   const [deadlines, setDeadlines] = useState<
     { id: string; subject: string; title: string; date: string; time: string }[]
-  >([
-    {
-      id: '1',
-      subject: 'Computer Networks',
-      title: 'Lab Assignment 4',
-      date: '2026-06-25',
-      time: '14:00',
-    },
-    {
-      id: '2',
-      subject: 'Database Management',
-      title: 'Project Phase 1 Deliverable',
-      date: '2026-06-28',
-      time: '23:59',
-    },
-  ]);
+  >([]);
   const [newDeadlineSubject, setNewDeadlineSubject] = useState('');
   const [newDeadlineTitle, setNewDeadlineTitle] = useState('');
   const [newDeadlineDate, setNewDeadlineDate] = useState('');
@@ -80,29 +61,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
       status: 'success' | 'failed' | 'pending';
       time: string;
     }[]
-  >([
-    {
-      id: '1',
-      name: 'Google Calendar Event: Database Project',
-      type: 'Calendar',
-      status: 'success',
-      time: '10 mins ago',
-    },
-    {
-      id: '2',
-      name: 'Telegram Notification: Lab Assignment 4',
-      type: 'Telegram',
-      status: 'success',
-      time: '1 hour ago',
-    },
-    {
-      id: '3',
-      name: 'Weekly Attendance Status dispatch',
-      type: 'Telegram Alert',
-      status: 'success',
-      time: '1 day ago',
-    },
-  ]);
+  >([]);
 
   const [aiTip, setAiTip] = useState(
     'Pro-Tip: Reviewing notes 15 minutes before sleep boosts memory retention by up to 22%!',
@@ -113,12 +72,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
   const [timetableParsing, setTimetableParsing] = useState(false);
   const [attendanceData, setAttendanceData] = useState<
     { subject: string; attended: number; total: number }[]
-  >([
-    { subject: 'Computer Networks', attended: 14, total: 18 },
-    { subject: 'Database Systems', attended: 16, total: 20 },
-    { subject: 'Machine Learning', attended: 11, total: 16 },
-    { subject: 'Compiler Design', attended: 15, total: 17 },
-  ]);
+  >([]);
+  const [newSubjectName, setNewSubjectName] = useState('');
+  const [newSubjectAttended, setNewSubjectAttended] = useState('');
+  const [newSubjectTotal, setNewSubjectTotal] = useState('');
 
   // --- Study Companion States ---
   const [pdfUploaded, setPdfUploaded] = useState(false);
@@ -141,26 +98,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
 
   const [flashcards, setFlashcards] = useState<
     { id: string; front: string; back: string; flipped: boolean }[]
-  >([
-    {
-      id: '1',
-      front: 'What is a Vector Embedding?',
-      back: 'A vector embedding is a numerical representation of data (like text or images) in a high-dimensional space, capturing semantic relationships.',
-      flipped: false,
-    },
-    {
-      id: '2',
-      front: 'What does R2 do in this system?',
-      back: 'Cloudflare R2 functions as an S3-compatible object storage to hold the uploaded notes and PDF textbooks.',
-      flipped: false,
-    },
-    {
-      id: '3',
-      front: 'What is D1 Database?',
-      back: "D1 is Cloudflare's native serverless SQL database, used for structured data like profiles, attendance logs, and deadlines.",
-      flipped: false,
-    },
-  ]);
+  >([]);
+  const [newFlashcardFront, setNewFlashcardFront] = useState('');
+  const [newFlashcardBack, setNewFlashcardBack] = useState('');
   const [collegeNotice, setCollegeNotice] = useState('');
   const [noticeSummary, setNoticeSummary] = useState<string[]>([]);
   const [summarizingNotice, setSummarizingNotice] = useState(false);
@@ -184,11 +124,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
   const [selectedAnswer, setSelectedAnswer] = useState('');
   const [prepAttempts, setPrepAttempts] = useState<
     { topic: string; total: number; success: number }[]
-  >([
-    { topic: 'Data Structures', total: 12, success: 9 },
-    { topic: 'Algorithms', total: 15, success: 10 },
-    { topic: 'System Design', total: 5, success: 3 },
-  ]);
+  >([]);
   const [answerFeedback, setAnswerFeedback] = useState<'correct' | 'wrong' | null>(null);
   const [prepHint, setPrepHint] = useState('');
   const [resumeFile, setResumeFile] = useState<File | null>(null);
@@ -342,6 +278,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
     setAttendanceData(updated);
   };
 
+  const addSubject = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSubjectName.trim() || !newSubjectTotal) return;
+    const attended = parseInt(newSubjectAttended) || 0;
+    const total = parseInt(newSubjectTotal) || 0;
+    setAttendanceData([...attendanceData, { subject: newSubjectName, attended, total }]);
+    setNewSubjectName('');
+    setNewSubjectAttended('');
+    setNewSubjectTotal('');
+  };
+
   // --- Study Companion Actions ---
   const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -391,6 +338,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
 
   const toggleFlashcard = (id: string) => {
     setFlashcards(flashcards.map((c) => (c.id === id ? { ...c, flipped: !c.flipped } : c)));
+  };
+
+  const addFlashcard = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newFlashcardFront.trim() || !newFlashcardBack.trim()) return;
+    setFlashcards([
+      ...flashcards,
+      {
+        id: Date.now().toString(),
+        front: newFlashcardFront,
+        back: newFlashcardBack,
+        flipped: false,
+      },
+    ]);
+    setNewFlashcardFront('');
+    setNewFlashcardBack('');
   };
 
   const summarizeNotice = (e: React.FormEvent) => {
@@ -979,6 +942,43 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
                     Test Telegram Alert
                   </button>
                 </div>
+                <form
+                  onSubmit={addSubject}
+                  className="p-4 bg-muted/20 border-b border-border/60 grid grid-cols-1 md:grid-cols-4 gap-3 text-xs"
+                >
+                  <input
+                    type="text"
+                    placeholder="New Subject Name (e.g. OS)"
+                    value={newSubjectName}
+                    onChange={(e) => setNewSubjectName(e.target.value)}
+                    className="px-3 py-1.5 bg-card border border-border/80 rounded focus:outline-none focus:ring-1 focus:ring-secondary text-foreground"
+                    required
+                  />
+                  <input
+                    type="number"
+                    placeholder="Classes Attended"
+                    value={newSubjectAttended}
+                    onChange={(e) => setNewSubjectAttended(e.target.value)}
+                    className="px-3 py-1.5 bg-card border border-border/80 rounded focus:outline-none focus:ring-1 focus:ring-secondary text-foreground"
+                    min="0"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Total Conducted"
+                    value={newSubjectTotal}
+                    onChange={(e) => setNewSubjectTotal(e.target.value)}
+                    className="px-3 py-1.5 bg-card border border-border/80 rounded focus:outline-none focus:ring-1 focus:ring-secondary text-foreground"
+                    min="0"
+                    required
+                  />
+                  <button
+                    type="submit"
+                    className="px-4 py-1.5 bg-secondary text-secondary-foreground font-bold rounded shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Subject</span>
+                  </button>
+                </form>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
@@ -1157,6 +1157,34 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
                 {/* Flipping Flashcards */}
                 <div className="bg-card border border-border/80 rounded-xl p-6 shadow-sm space-y-4">
                   <h3 className="text-sm font-bold">Auto-Generated Flashcards (Flipping Cards)</h3>
+                  <form
+                    onSubmit={addFlashcard}
+                    className="p-4 bg-muted/40 rounded-lg border border-border/60 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs"
+                  >
+                    <input
+                      type="text"
+                      placeholder="Concept/Question (Front)"
+                      value={newFlashcardFront}
+                      onChange={(e) => setNewFlashcardFront(e.target.value)}
+                      className="px-3 py-1.5 bg-card border border-border/80 rounded focus:outline-none focus:ring-1 focus:ring-secondary text-foreground"
+                      required
+                    />
+                    <input
+                      type="text"
+                      placeholder="Solution/Answer (Back)"
+                      value={newFlashcardBack}
+                      onChange={(e) => setNewFlashcardBack(e.target.value)}
+                      className="px-3 py-1.5 bg-card border border-border/80 rounded focus:outline-none focus:ring-1 focus:ring-secondary text-foreground"
+                      required
+                    />
+                    <button
+                      type="submit"
+                      className="px-4 py-1.5 bg-secondary text-secondary-foreground font-bold rounded shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Flashcard</span>
+                    </button>
+                  </form>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {flashcards.map((card) => (
                       <div
