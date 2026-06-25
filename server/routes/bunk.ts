@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/auth';
+import { parseTimetable } from '../services/vision';
 
 const bunkRoutes = new Hono<{ Variables: { userId: string } }>();
 
@@ -11,6 +12,33 @@ interface TimetableSubject {
 }
 
 bunkRoutes.use('/*', authMiddleware);
+
+bunkRoutes.post('/parse-timetable', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const { imageBase64, mimeType } = body;
+
+    if (!imageBase64) {
+      return c.json({ success: false, error: 'imageBase64 is required' }, 400);
+    }
+
+    const buffer = Buffer.from(imageBase64, 'base64');
+    const apiKey = (c.env as any)?.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+
+    if (!apiKey) {
+      return c.json({ success: false, error: 'GEMINI_API_KEY is not configured on the server.' }, 500);
+    }
+
+    const parsed = await parseTimetable(apiKey, buffer, mimeType || 'image/png');
+
+    return c.json({
+      success: true,
+      timetable: parsed.subjects
+    }, 200);
+  } catch (err) {
+    return c.json({ success: false, error: (err as Error).message }, 500);
+  }
+});
 
 bunkRoutes.post('/presigned-url', async (c) => {
   try {

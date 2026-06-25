@@ -73,6 +73,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
   const [attendanceData, setAttendanceData] = useState<
     { subject: string; attended: number; total: number }[]
   >([]);
+  const [parsedTimetable, setParsedTimetable] = useState<
+    { day: string; subject: string; startTime: string; endTime: string }[] | null
+  >(null);
   const [newSubjectName, setNewSubjectName] = useState('');
   const [newSubjectAttended, setNewSubjectAttended] = useState('');
   const [newSubjectTotal, setNewSubjectTotal] = useState('');
@@ -247,28 +250,67 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
       setTimetableFile(file);
       setTimetableParsing(true);
 
-      // Simulate Gemini Vision Parser mapping out subjects
-      setTimeout(() => {
-        setTimetableParsing(false);
-        setAttendanceData([
-          { subject: 'Advanced Algorithms', attended: 12, total: 12 },
-          { subject: 'System Architecture', attended: 10, total: 15 },
-          { subject: 'Applied Machine Learning', attended: 14, total: 20 },
-          { subject: 'Cybersecurity Principles', attended: 9, total: 10 },
-        ]);
+      try {
+        const reader = new FileReader();
+        reader.onload = async () => {
+          try {
+            const base64String = (reader.result as string).split(',')[1];
+            const token = localStorage.getItem('campus_token');
+            const response = await fetch('/api/bunk/parse-timetable', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({
+                imageBase64: base64String,
+                mimeType: file.type
+              })
+            });
 
-        // Add automation log
-        setAutomations((prev) => [
-          {
-            id: Math.random().toString(),
-            name: `Gemini Vision: Parsed timetable '${file.name}' into D1`,
-            type: 'Gemini OCR',
-            status: 'success' as const,
-            time: 'Just now',
-          },
-          ...prev,
-        ]);
-      }, 1500);
+            if (!response.ok) {
+              throw new Error('Failed to parse timetable from server');
+            }
+
+            const data = (await response.json()) as any;
+            if (data.success && data.timetable) {
+              setParsedTimetable(data.timetable);
+              
+              // Extract unique subjects
+              const uniqueSubjects: string[] = Array.from(
+                new Set(data.timetable.map((item: any) => item.subject))
+              );
+              
+              setAttendanceData(
+                uniqueSubjects.map((sub: string) => ({
+                  subject: sub,
+                  attended: 0,
+                  total: 0
+                }))
+              );
+            }
+          } catch (error) {
+            console.error('Error parsing timetable:', error);
+            alert('Error parsing timetable image. Please ensure GEMINI_API_KEY is configured and try again.');
+          } finally {
+            setTimetableParsing(false);
+            setAutomations((prev) => [
+              {
+                id: Math.random().toString(),
+                name: `Gemini Vision: Parsed timetable '${file.name}' into D1`,
+                type: 'Gemini OCR',
+                status: 'success' as const,
+                time: 'Just now',
+              },
+              ...prev,
+            ]);
+          }
+        };
+        reader.readAsDataURL(file);
+      } catch (error) {
+        console.error('File reading failed:', error);
+        setTimetableParsing(false);
+      }
     }
   };
 
@@ -913,6 +955,54 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
                   <span>
                     Gemini Vision parsing timetable layout and writing schema objects to D1...
                   </span>
+                </div>
+              )}
+
+              {/* Timetable visual display */}
+              {parsedTimetable && parsedTimetable.length > 0 && (
+                <div className="mt-6 space-y-4">
+                  <h3 className="text-sm font-bold flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-secondary" />
+                    <span>Uploaded Timetable Schedule</span>
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'].map((dayName) => {
+                      const dayClasses = parsedTimetable.filter(
+                        (item) => item.day.toLowerCase() === dayName.toLowerCase()
+                      );
+                      return (
+                        <div
+                          key={dayName}
+                          className="bg-muted/20 border border-border/60 rounded-xl p-3 space-y-2.5"
+                        >
+                          <div className="font-bold text-xs text-secondary border-b border-border/40 pb-1.5 uppercase tracking-wider">
+                            {dayName}
+                          </div>
+                          <div className="space-y-2">
+                            {dayClasses.map((cls, idx) => (
+                              <div
+                                key={idx}
+                                className="p-2 bg-card border border-border/80 rounded-lg text-[11px] space-y-1 shadow-xs hover:border-secondary/40 transition-colors"
+                              >
+                                <div className="font-semibold text-foreground truncate" title={cls.subject}>
+                                  {cls.subject}
+                                </div>
+                                <div className="text-muted-foreground text-[10px] flex items-center gap-1">
+                                  <Clock className="w-3.5 h-3.5 text-secondary/60 shrink-0" />
+                                  <span>{cls.startTime} - {cls.endTime}</span>
+                                </div>
+                              </div>
+                            ))}
+                            {dayClasses.length === 0 && (
+                              <div className="text-[10px] text-muted-foreground italic py-4 text-center">
+                                No classes
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 
