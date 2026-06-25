@@ -222,24 +222,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
 
     try {
       // POST to backend — which saves to D1 and fires n8n → Google Calendar
-      const token = localStorage.getItem('campus_token');
-      const res = await fetch('/api/academic/deadlines', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          subject: newDL.subject,
-          title: newDL.title,
-          dueDate: newDL.date,
-          dueTime: newDL.time,
-          calendarId: studentInfo.googleAccount || 'primary',
-        }),
+      const res = await api.post('/academic/deadlines', {
+        subject: newDL.subject,
+        title: newDL.title,
+        dueDate: newDL.date,
+        dueTime: newDL.time,
+        calendarId: studentInfo.googleAccount || 'primary',
       });
 
-      if (res.ok) {
-        const data = (await res.json()) as any;
+      if (res.status === 200 || res.status === 201) {
+        const data = res.data as any;
         // Swap temp id with real DB id
         setDeadlines((prev) =>
           prev.map((d) => (d.id === tempId ? { ...d, id: data.deadline?.id || tempId } : d)),
@@ -306,26 +298,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
         reader.onload = async () => {
           try {
             const base64String = (reader.result as string).split(',')[1];
-            const token = localStorage.getItem('campus_token');
-            const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
-            const requestUrl = `${apiBaseUrl.replace(/\/$/, '')}/api/bunk/parse-timetable`;
-            const response = await fetch(requestUrl, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              },
-              body: JSON.stringify({
-                imageBase64: base64String,
-                mimeType: file.type
-              })
+            const response = await api.post('/bunk/parse-timetable', {
+              imageBase64: base64String,
+              mimeType: file.type
             });
 
-            if (!response.ok) {
-              throw new Error('Failed to parse timetable from server');
-            }
-
-            const data = (await response.json()) as any;
+            const data = response.data as any;
             if (data.success && data.timetable) {
               setParsedTimetable(data.timetable);
               
