@@ -1,0 +1,129 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-serif: 'Playfair Display', serif;
+}
+
+:root {
+  --background: #f3e9d2; /* Warm Cream */
+  --foreground: #3b2f2f; /* Dark Brown */
+  --card: #fdfbf7;
+  --card-foreground: #3b2f2f;
+  --popover: #fdfbf7;
+  --popover-foreground: #3b2f2f;
+  --primary: #d35400; /* Burnt Orange */
+  --primary-foreground: #ffffff;
+  --secondary: #8e4a23; /* Rust/Brown */
+  --secondary-foreground: #ffffff;
+  --muted: #e6dac3;
+  --muted-foreground: #6b5b5b;
+  --accent: #e6dac3;
+  --accent-foreground: #d35400;
+  --destructive: #c0392b;
+  --destructive-foreground: #ffffff;
+  --border: #d6caba;
+  --input: #d6caba;
+  --ring: #d35400;
+  --radius: 0.5rem;
+}
+
+.dark {
+  --background: #1c1917; /* Stone 900 - Warm Charcoal */
+  --foreground: #fafaf9; /* Stone 50 */
+  --card: #292524; /* Stone 800 */
+  --card-foreground: #fafaf9;
+  --popover: #292524;
+  --popover-foreground: #fafaf9;
+  --primary: #ea580c; /* Warm Orange Accent */
+  --primary-foreground: #ffffff;
+  --secondary: #d6d3d1; /* Stone 300 */
+  --secondary-foreground: #1c1917;
+  --muted: #44403c; /* Stone 700 */
+  --muted-foreground: #a8a29e; /* Stone 400 */
+  --accent: #44403c;
+  --accent-foreground: #ea580c;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #44403c;
+  --input: #44403c;
+  --ring: #ea580c;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  transition:
+    background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.3s ease;
+  margin: 0;
+  padding: 0;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.font-serif {
+  font-family: var(--font-serif);
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Card flip effects */
+.perspective-1000 {
+  perspective: 1000px;
+}
+.preserve-3d {
+  transform-style: preserve-3d;
+}
+.backface-hidden {
+  backface-visibility: hidden;
+}
+.rotate-y-180 {
+  transform: rotateY(180deg);
+}
+
+/* Micro-animations */
+@keyframes pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 5px rgba(211, 84, 0, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(211, 84, 0, 0.6);
+  }
+}
+.glow-orange {
+  animation: pulse-glow 2s infinite ease-in-out;
+}
