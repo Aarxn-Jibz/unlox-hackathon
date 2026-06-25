@@ -31,11 +31,13 @@ jobs:
               - 'tsconfig.json'
               - 'tsconfig.app.json'
               - 'tsconfig.node.json'
+              - '.github/workflows/deploy.yml'
             backend:
               - 'server/**'
               - 'wrangler.toml'
               - 'package.json'
               - 'bun.lock'
+              - '.github/workflows/deploy.yml'
 
   deploy-pages:
     name: Deploy Frontend to Cloudflare Pages
