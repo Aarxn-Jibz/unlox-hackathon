@@ -24,8 +24,9 @@ baseApp.use('/*', async (c, next) => {
       if (!allowed || allowed === '*') {
         return origin || '*';
       }
-      const origins = allowed.split(',').map((o: string) => o.trim());
-      if (origin && origins.includes(origin)) {
+      const origins = allowed.split(',').map((o: string) => o.trim().replace(/\/$/, ''));
+      const cleanOrigin = origin ? origin.trim().replace(/\/$/, '') : '';
+      if (cleanOrigin && origins.includes(cleanOrigin)) {
         return origin;
       }
       return origins[0] || 'http://localhost:5173';
