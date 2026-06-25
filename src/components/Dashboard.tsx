@@ -295,7 +295,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
         reader.onload = async () => {
           try {
             const base64String = (reader.result as string).split(',')[1];
-            const response = await api.post('/bunk/parse-timetable', {
+            const response = await api.post('/api/bunk/parse-timetable', {
               imageBase64: base64String,
               mimeType: file.type
             });

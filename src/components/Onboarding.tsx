@@ -50,7 +50,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
       };
       const semester = yearToSemester[year] || 1;
 
-      await api.put('/onboard', {
+      await api.put('/api/onboard', {
         branch,
         semester,
         attendanceTarget: 75,

@@ -34,7 +34,7 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
     setLoading(true);
 
     try {
-      const response = await api.post('/login', {
+      const response = await api.post('/api/login', {
         email: loginEmail,
         password: loginPassword,
       });
@@ -109,7 +109,7 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
     setLoading(true);
 
     try {
-      const response = await api.post('/signup', {
+      const response = await api.post('/api/signup', {
         name: signupName,
         email: signupEmail,
         password: signupPassword,
