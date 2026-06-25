@@ -62,7 +62,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: campusflow-frontend  # Replace with your actual Cloudflare Pages project name
+          projectName: campusflowapp  # Replace with your actual Cloudflare Pages project name
           directory: dist
 
   deploy-worker:
