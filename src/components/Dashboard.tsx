@@ -256,7 +256,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
           try {
             const base64String = (reader.result as string).split(',')[1];
             const token = localStorage.getItem('campus_token');
-            const response = await fetch('/api/bunk/parse-timetable', {
+            const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
+            const requestUrl = `${apiBaseUrl.replace(/\/$/, '')}/api/bunk/parse-timetable`;
+            const response = await fetch(requestUrl, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
