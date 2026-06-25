@@ -13,3 +13,14 @@ export function getGeminiClient(apiKey: string): GoogleGenerativeAI {
   }
   return new GoogleGenerativeAI(apiKey);
 }
+
+/**
+ * Embed a single text string using Gemini text-embedding-004 model.
+ * Returns a 768-dimensional vector.
+ */
+export async function embedContent(apiKey: string, text: string): Promise<number[]> {
+  const genAI = getGeminiClient(apiKey);
+  const model = genAI.getGenerativeModel({ model: 'text-embedding-004' });
+  const result = await model.embedContent(text);
+  return result.embedding.values;
+}

@@ -1,9 +1,11 @@
 name = "campusflow-server"
+main = "server/index.ts"
 compatibility_date = "2024-03-03"
+compatibility_flags = ["nodejs_compat"]
 
 [vars]
-ALLOWED_ORIGINS = "https://campusflowapp.pages.dev/"
-# Add global environment variables if needed
+ALLOWED_ORIGINS = "https://campusflowapp.pages.dev"
+N8N_WEBHOOK_URL = "https://campusflow-n8n.onrender.com/webhook/create-event"
 
 [[d1_databases]]
 binding = "DB"

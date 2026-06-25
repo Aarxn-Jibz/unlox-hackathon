@@ -14,15 +14,12 @@ import {
 } from '../models/academic';
 import type { BunkCalcInput, BunkCalcOutput, NoticePayload, NoticeSummary } from '../../types';
 
-// n8n webhook URL for Google Calendar automation
-const N8N_WEBHOOK_URL = 'https://campusflow-n8n.onrender.com/webhook/create-event';
-
 // Tasks Controllers
 export async function handleGetTasks(c: Context) {
   try {
     const db = c.env.DB as D1Database;
-    const userPayload = c.get('jwtPayload') as { id: string };
-    const tasks = await getTasksByUserId(db, userPayload.id);
+    const userId = c.get('userId') as string;
+    const tasks = await getTasksByUserId(db, userId);
     return c.json({ tasks });
   } catch (error) {
     return c.json({ error: (error as Error).message || 'Internal Server Error' }, 500);
@@ -32,14 +29,14 @@ export async function handleGetTasks(c: Context) {
 export async function handleCreateTask(c: Context) {
   try {
     const db = c.env.DB as D1Database;
-    const userPayload = c.get('jwtPayload') as { id: string };
+    const userId = c.get('userId') as string;
     const body = await c.req.json();
 
     if (!body.title || !body.status || !body.priority) {
       return c.json({ error: 'Title, status, and priority are required' }, 400);
     }
 
-    const task = await createTask(db, userPayload.id, body);
+    const task = await createTask(db, userId, body);
     return c.json({ task }, 201);
   } catch (error) {
     return c.json({ error: (error as Error).message || 'Internal Server Error' }, 500);
@@ -49,11 +46,11 @@ export async function handleCreateTask(c: Context) {
 export async function handleUpdateTask(c: Context) {
   try {
     const db = c.env.DB as D1Database;
-    const userPayload = c.get('jwtPayload') as { id: string };
+    const userId = c.get('userId') as string;
     const taskId = c.req.param('id') as string;
     const body = await c.req.json();
 
-    const success = await updateTask(db, userPayload.id, taskId, body);
+    const success = await updateTask(db, userId, taskId, body);
     if (!success) {
       return c.json({ error: 'Task not found or update failed' }, 404);
     }
@@ -67,10 +64,10 @@ export async function handleUpdateTask(c: Context) {
 export async function handleDeleteTask(c: Context) {
   try {
     const db = c.env.DB as D1Database;
-    const userPayload = c.get('jwtPayload') as { id: string };
+    const userId = c.get('userId') as string;
     const taskId = c.req.param('id') as string;
 
-    const success = await deleteTask(db, userPayload.id, taskId);
+    const success = await deleteTask(db, userId, taskId);
     if (!success) {
       return c.json({ error: 'Task not found or deletion failed' }, 404);
     }
@@ -85,8 +82,8 @@ export async function handleDeleteTask(c: Context) {
 export async function handleGetAttendance(c: Context) {
   try {
     const db = c.env.DB as D1Database;
-    const userPayload = c.get('jwtPayload') as { id: string };
-    const attendance = await getAttendanceByUserId(db, userPayload.id);
+    const userId = c.get('userId') as string;
+    const attendance = await getAttendanceByUserId(db, userId);
     return c.json({ attendance });
   } catch (error) {
     return c.json({ error: (error as Error).message || 'Internal Server Error' }, 500);
@@ -96,7 +93,7 @@ export async function handleGetAttendance(c: Context) {
 export async function handleCalculateBunk(c: Context) {
   try {
     const db = c.env.DB as D1Database;
-    const userPayload = c.get('jwtPayload') as { id: string };
+    const userId = c.get('userId') as string;
     const body: BunkCalcInput = await c.req.json();
 
     if (!body.subjects || !Array.isArray(body.subjects)) {
@@ -105,11 +102,11 @@ export async function handleCalculateBunk(c: Context) {
 
     // Process and upsert each subject attendance
     for (const sub of body.subjects) {
-      await upsertAttendance(db, userPayload.id, sub);
+      await upsertAttendance(db, userId, sub);
     }
 
     // Retrieve full calculated list
-    const updatedAttendance = await getAttendanceByUserId(db, userPayload.id);
+    const updatedAttendance = await getAttendanceByUserId(db, userId);
 
     let totalAttended = 0;
     let totalClasses = 0;
@@ -245,8 +242,8 @@ Generate a structured JSON response matching the following schema:
 export async function handleGetPlacementAttempts(c: Context) {
   try {
     const db = c.env.DB as D1Database;
-    const userPayload = c.get('jwtPayload') as { id: string };
-    const attempts = await getPlacementAttemptsByUserId(db, userPayload.id);
+    const userId = c.get('userId') as string;
+    const attempts = await getPlacementAttemptsByUserId(db, userId);
     return c.json({ attempts });
   } catch (error) {
     return c.json({ error: (error as Error).message || 'Internal Server Error' }, 500);
@@ -256,14 +253,14 @@ export async function handleGetPlacementAttempts(c: Context) {
 export async function handleCreatePlacementAttempt(c: Context) {
   try {
     const db = c.env.DB as D1Database;
-    const userPayload = c.get('jwtPayload') as { id: string };
+    const userId = c.get('userId') as string;
     const body = await c.req.json();
 
     if (!body.companyName || !body.role || !body.stage || !body.date) {
       return c.json({ error: 'CompanyName, role, stage, and date are required' }, 400);
     }
 
-    const attempt = await createPlacementAttempt(db, userPayload.id, body);
+    const attempt = await createPlacementAttempt(db, userId, body);
     return c.json({ attempt }, 201);
   } catch (error) {
     return c.json({ error: (error as Error).message || 'Internal Server Error' }, 500);
@@ -274,8 +271,8 @@ export async function handleCreatePlacementAttempt(c: Context) {
 export async function handleGetDeadlines(c: Context) {
   try {
     const db = c.env.DB as D1Database;
-    const userPayload = c.get('jwtPayload') as { id: string };
-    const deadlines = await getDeadlinesByUserId(db, userPayload.id);
+    const userId = c.get('userId') as string;
+    const deadlines = await getDeadlinesByUserId(db, userId);
     return c.json({ deadlines });
   } catch (error) {
     return c.json({ error: (error as Error).message || 'Internal Server Error' }, 500);
@@ -285,7 +282,7 @@ export async function handleGetDeadlines(c: Context) {
 export async function handleCreateDeadline(c: Context) {
   try {
     const db = c.env.DB as D1Database;
-    const userPayload = c.get('jwtPayload') as { id: string; email?: string; googleAccount?: string };
+    const userId = c.get('userId') as string;
     const body = await c.req.json();
 
     if (!body.subject || !body.title || !body.dueDate) {
@@ -293,7 +290,7 @@ export async function handleCreateDeadline(c: Context) {
     }
 
     // 1. Save deadline to D1 database
-    const deadline = await createDeadline(db, userPayload.id, {
+    const deadline = await createDeadline(db, userId, {
       subject: body.subject,
       title: body.title,
       description: body.description,
@@ -302,18 +299,23 @@ export async function handleCreateDeadline(c: Context) {
     });
 
     // 2. Fire n8n webhook to create a Google Calendar event (non-blocking, best-effort)
-    const calendarId = body.calendarId || userPayload.googleAccount || userPayload.email || 'primary';
-    fetch(N8N_WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        calendarId,
-        subject: body.subject,
-        title: body.title,
-        date: body.dueDate,
-        time: body.dueTime || '12:00',
-      }),
-    }).catch((err) => console.warn('[n8n] Calendar webhook failed:', err));
+    const n8nWebhookUrl = c.env.N8N_WEBHOOK_URL as string | undefined;
+    if (n8nWebhookUrl) {
+      const calendarId = body.calendarId || body.googleAccount || 'primary';
+      fetch(n8nWebhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          calendarId,
+          subject: body.subject,
+          title: body.title,
+          date: body.dueDate,
+          time: body.dueTime || '12:00',
+        }),
+      }).catch((err) => console.warn('[n8n] Calendar webhook failed:', err));
+    } else {
+      console.warn('[n8n] N8N_WEBHOOK_URL not configured, skipping calendar sync');
+    }
 
     return c.json({ deadline }, 201);
   } catch (error) {

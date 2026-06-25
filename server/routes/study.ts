@@ -1,162 +1,124 @@
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/auth';
-import { askQuestion, extractTextFromPdf, processPdfDocument } from '../services/rag';
-import { generateFlashcards } from '../services/flashcards';
-import { DocumentRepository } from '../models/documents';
-import { FlashcardRepository } from '../models/flashcards';
+import {
+  createDocument,
+  updateDocumentText,
+  getDocumentsByUserId,
+  getDocumentById,
+  createFlashcardsBulk,
+  getFlashcardsByDocumentId,
+} from '../models/study';
+import {
+  extractTextFromPDF,
+  chunkText,
+  embedText,
+  embedTexts,
+  storeVectors,
+  searchSimilarChunks,
+  generateAnswer,
+  generateFlashcardsFromText,
+} from '../services/study';
 import type { Env } from '../../types';
 
 const studyRoutes = new Hono<{ Bindings: Env; Variables: { userId: string } }>();
 
 studyRoutes.use('/*', authMiddleware);
 
-studyRoutes.post('/presigned-url', async (c) => {
-  try {
-    const body = await c.req.json().catch(() => ({}));
-    const contentLength = body.contentLength ?? Number(c.req.query('contentLength'));
-
-    if (contentLength === undefined || isNaN(contentLength)) {
-      return c.json({ success: false, error: 'contentLength is required' }, 400);
-    }
-
-    if (contentLength > 5 * 1024 * 1024) {
-      return c.json({ success: false, error: 'File size exceeds the 5MB limit.' }, 400);
-    }
-
-    const fileName = body.fileName || 'document.pdf';
-    const key = `study/${c.get('userId')}/${Date.now()}-${fileName}`;
-    const uploadUrl = `${new URL(c.req.url).origin}/api/study/upload?key=${encodeURIComponent(key)}`;
-
-    return c.json(
-      {
-        success: true,
-        uploadUrl,
-        key,
-      },
-      200,
-    );
-  } catch (err) {
-    return c.json({ success: false, error: (err as Error).message }, 500);
-  }
-});
-
-studyRoutes.put('/upload', async (c) => {
-  try {
-    const key = c.req.query('key');
-    if (!key) {
-      return c.json({ success: false, error: 'key is required' }, 400);
-    }
-
-    const body = await c.req.arrayBuffer();
-    if (!body || body.byteLength === 0) {
-      return c.json({ success: false, error: 'File content is empty' }, 400);
-    }
-
-    await c.env.campusflow_bucket.put(key, body, {
-      httpMetadata: {
-        contentType: c.req.header('Content-Type') || 'application/pdf',
-      },
-    });
-
-    return c.json({ success: true, key }, 200);
-  } catch (err) {
-    return c.json({ success: false, error: (err as Error).message }, 500);
-  }
-});
-
-studyRoutes.post('/document', async (c) => {
+studyRoutes.post('/upload', async (c) => {
   try {
     const userId = c.get('userId');
-    const body = await c.req.json().catch(() => ({}));
-    const { name, r2Key, fileSize, mimeType } = body;
-
-    if (!name || !r2Key || fileSize === undefined) {
-      return c.json({ success: false, error: 'name, r2Key, and fileSize are required' }, 400);
-    }
-
-    if (fileSize > 5 * 1024 * 1024) {
-      return c.json({ success: false, error: 'File size exceeds the 5MB limit.' }, 400);
-    }
-
-    const docRepo = new DocumentRepository(c.env.DB);
-    const doc = await docRepo.create(userId, { r2Key, name, fileSize, mimeType: mimeType || 'application/pdf' });
-
-    const fileObj = await c.env.campusflow_bucket.get(r2Key);
-    if (!fileObj) {
-      return c.json({ success: false, error: 'Uploaded file not found in R2' }, 404);
-    }
-
-    const fileBuffer = await fileObj.arrayBuffer();
-
+    const db = c.env.DB;
     const apiKey = c.env.GEMINI_API_KEY;
+    const vectorize = c.env.VECTORIZE;
+
     if (!apiKey) {
-      return c.json({ success: false, error: 'GEMINI_API_KEY environment variable is missing' }, 500);
+      return c.json({ success: false, error: 'GEMINI_API_KEY is not configured' }, 500);
     }
 
-    await processPdfDocument(apiKey, fileBuffer, doc.id, c.env.VECTORIZE);
+    const body = await c.req.json().catch(() => ({}));
+    const { fileBase64, fileName, mimeType } = body;
 
-    return c.json(
-      {
-        success: true,
-        document: doc,
-      },
-      200,
+    if (!fileBase64) {
+      return c.json({ success: false, error: 'fileBase64 is required' }, 400);
+    }
+
+    const fileSize = Math.round((fileBase64.length * 3) / 4);
+
+    if (fileSize > 10 * 1024 * 1024) {
+      return c.json({ success: false, error: 'File size exceeds 10MB limit' }, 400);
+    }
+
+    const doc = await createDocument(
+      db, userId, fileName || 'document.pdf',
+      fileSize, mimeType || 'application/pdf',
     );
-  } catch (err) {
-    return c.json({ success: false, error: (err as Error).message }, 500);
-  }
-});
 
-studyRoutes.get('/documents', async (c) => {
-  try {
-    const userId = c.get('userId');
-    const docRepo = new DocumentRepository(c.env.DB);
-    const documents = await docRepo.findByUserId(userId);
-    return c.json({ success: true, documents }, 200);
+    const extractedText = await extractTextFromPDF(apiKey, fileBase64);
+    const chunks = chunkText(extractedText);
+
+    if (chunks.length === 0) {
+      return c.json({ success: false, error: 'No text could be extracted from the PDF' }, 400);
+    }
+
+    const embeddings = await embedTexts(apiKey, chunks);
+    const inserted = await storeVectors(vectorize, doc.id, chunks, embeddings);
+
+    await updateDocumentText(db, doc.id, extractedText, inserted);
+
+    return c.json({
+      success: true,
+      document: { id: doc.id, name: doc.name, fileSize: doc.fileSize, chunkCount: inserted },
+    }, 201);
   } catch (err) {
+    console.error('Document upload error:', err);
     return c.json({ success: false, error: (err as Error).message }, 500);
   }
 });
 
 studyRoutes.post('/ask', async (c) => {
   try {
-    const { question, documentId } = await c.req.json().catch(() => ({}));
+    const userId = c.get('userId');
+    const db = c.env.DB;
+    const apiKey = c.env.GEMINI_API_KEY;
+    const vectorize = c.env.VECTORIZE;
+
+    if (!apiKey) {
+      return c.json({ success: false, error: 'GEMINI_API_KEY is not configured' }, 500);
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    const { question, documentId } = body;
+
     if (!question) {
       return c.json({ success: false, error: 'question is required' }, 400);
     }
 
-    const apiKey = c.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return c.json({ success: false, error: 'GEMINI_API_KEY environment variable is missing' }, 500);
+    const queryEmbedding = await embedText(apiKey, question);
+
+    const topK = 8;
+    let matches = await searchSimilarChunks(vectorize, queryEmbedding, topK);
+
+    if (documentId) {
+      const doc = await getDocumentById(db, documentId, userId);
+      if (!doc) {
+        return c.json({ success: false, error: 'Document not found' }, 404);
+      }
+      matches = matches.filter((m) => m.documentId === documentId).slice(0, topK);
     }
 
-    const vectorize = c.env.VECTORIZE;
-    if (!vectorize) {
-      return c.json({ success: false, error: 'VECTORIZE binding is missing' }, 500);
+    if (matches.length === 0) {
+      const noDataMessage = documentId
+        ? 'No relevant content found in the selected document for your question.'
+        : 'No relevant content found. Upload a document first.';
+      return c.json({ success: true, answer: noDataMessage, sources: [] });
     }
 
-    const result = await askQuestion(apiKey, question, documentId, vectorize);
+    const answer = await generateAnswer(apiKey, question, matches);
+    const sourceIds = [...new Set(matches.map((m) => m.documentId))];
 
-    return c.json(
-      {
-        success: true,
-        answer: result.answer,
-        sources: result.sources,
-      },
-      200,
-    );
+    return c.json({ success: true, answer, sources: sourceIds });
   } catch (err) {
-    return c.json({ success: false, error: (err as Error).message }, 500);
-  }
-});
-
-studyRoutes.get('/flashcards', async (c) => {
-  try {
-    const userId = c.get('userId');
-    const cardRepo = new FlashcardRepository(c.env.DB);
-    const flashcards = await cardRepo.findByUserId(userId);
-    return c.json({ success: true, flashcards }, 200);
-  } catch (err) {
+    console.error('Ask error:', err);
     return c.json({ success: false, error: (err as Error).message }, 500);
   }
 });
@@ -164,58 +126,60 @@ studyRoutes.get('/flashcards', async (c) => {
 studyRoutes.post('/flashcards/generate', async (c) => {
   try {
     const userId = c.get('userId');
-    const { documentId, notesText } = await c.req.json().catch(() => ({}));
-
+    const db = c.env.DB;
     const apiKey = c.env.GEMINI_API_KEY;
+
     if (!apiKey) {
-      return c.json({ success: false, error: 'GEMINI_API_KEY environment variable is missing' }, 500);
+      return c.json({ success: false, error: 'GEMINI_API_KEY is not configured' }, 500);
     }
 
-    let textToProcess = '';
+    const body = await c.req.json().catch(() => ({}));
+    const { documentId } = body;
 
-    if (documentId) {
-      const docRepo = new DocumentRepository(c.env.DB);
-      const doc = await docRepo.findById(documentId, userId);
-      if (!doc) {
-        return c.json({ success: false, error: 'Document not found' }, 404);
-      }
-
-      const fileObj = await c.env.campusflow_bucket.get(doc.r2Key);
-      if (!fileObj) {
-        return c.json({ success: false, error: 'File not found in storage' }, 404);
-      }
-
-      const fileBuffer = await fileObj.arrayBuffer();
-      textToProcess = await extractTextFromPdf(fileBuffer);
-    } else if (notesText) {
-      textToProcess = notesText;
-    } else {
-      return c.json({ success: false, error: 'Either documentId or notesText is required' }, 400);
+    if (!documentId) {
+      return c.json({ success: false, error: 'documentId is required' }, 400);
     }
 
-    if (!textToProcess || !textToProcess.trim()) {
-      return c.json({ success: false, error: 'No text content available to generate flashcards' }, 400);
+    const doc = await getDocumentById(db, documentId, userId);
+    if (!doc || !doc.extracted_text) {
+      return c.json({ success: false, error: 'Document not found or no text extracted' }, 404);
     }
 
-    const response = await generateFlashcards(apiKey, textToProcess);
+    const cards = await generateFlashcardsFromText(apiKey, doc.extracted_text);
+    const saved = await createFlashcardsBulk(db, userId, documentId, cards);
 
-    const cardRepo = new FlashcardRepository(c.env.DB);
-    const dtos = response.flashcards.map((card) => ({
-      documentId: documentId || undefined,
-      front: card.question,
-      back: card.answer,
-    }));
-
-    const savedCards = await cardRepo.bulkCreate(userId, dtos);
-
-    return c.json(
-      {
-        success: true,
-        flashcards: savedCards,
-      },
-      200,
-    );
+    return c.json({ success: true, flashcards: saved }, 201);
   } catch (err) {
+    console.error('Flashcard generation error:', err);
+    return c.json({ success: false, error: (err as Error).message }, 500);
+  }
+});
+
+studyRoutes.get('/flashcards', async (c) => {
+  try {
+    const userId = c.get('userId');
+    const db = c.env.DB;
+    const documentId = c.req.query('documentId');
+
+    const flashcards = documentId
+      ? await getFlashcardsByDocumentId(db, documentId, userId)
+      : [];
+
+    return c.json({ success: true, flashcards });
+  } catch (err) {
+    console.error('Flashcard fetch error:', err);
+    return c.json({ success: false, error: (err as Error).message }, 500);
+  }
+});
+
+studyRoutes.get('/documents', async (c) => {
+  try {
+    const userId = c.get('userId');
+    const db = c.env.DB;
+    const documents = await getDocumentsByUserId(db, userId);
+    return c.json({ success: true, documents });
+  } catch (err) {
+    console.error('Documents fetch error:', err);
     return c.json({ success: false, error: (err as Error).message }, 500);
   }
 });

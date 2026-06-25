@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { jwt } from 'hono/jwt';
+import { authMiddleware } from '../middleware/auth';
 import {
   handleGetTasks,
   handleCreateTask,
@@ -15,9 +15,6 @@ import {
 } from '../controllers/academic';
 
 const academicRouter = new Hono();
-const JWT_SECRET = 'campusflow-secret-key-12345';
-
-const authMiddleware = jwt({ secret: JWT_SECRET, alg: 'HS256' });
 
 // Protected Tasks API
 academicRouter.get('/tasks', authMiddleware, handleGetTasks);

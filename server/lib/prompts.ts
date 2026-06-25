@@ -1,8 +1,10 @@
 export const FLASHCARD_PROMPT = `
-Generate 10 flashcards from the provided text.
+Generate 10-15 flashcards from the provided text. Each flashcard should test understanding of key concepts, definitions, or important facts.
 
-Return JSON:
+Text:
+{text}
 
+Return ONLY valid JSON matching this schema (no markdown, no explanation):
 {
   "flashcards": [
     {

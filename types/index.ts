@@ -191,4 +191,7 @@ export interface Env {
   ALLOWED_ORIGINS?: string;
   TELEGRAM_BOT_TOKEN?: string;
   GEMINI_API_KEY?: string;
+  N8N_WEBHOOK_URL?: string;
+  campusflow_bucket: R2Bucket;
+  VECTORIZE: VectorizeIndex;
 }

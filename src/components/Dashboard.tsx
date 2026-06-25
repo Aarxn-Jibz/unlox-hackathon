@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import api from '../services/api';
 import {
   Home,
   Calculator,
@@ -27,8 +28,6 @@ import {
   Copy,
   ExternalLink,
 } from 'lucide-react';
-import api from '../services/api';
-
 interface DashboardProps {
   onLogout: () => void;
   studentInfo: {
@@ -106,13 +105,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
   // --- Study Companion States ---
   const [pdfUploaded, setPdfUploaded] = useState(false);
   const [pdfName, setPdfName] = useState('');
+  const [documentId, setDocumentId] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isAsking, setIsAsking] = useState(false);
   const [companionQuery, setCompanionQuery] = useState('');
+  const [isGeneratingFlashcards, setIsGeneratingFlashcards] = useState(false);
   const [companionChat, setCompanionChat] = useState<
     { role: 'user' | 'assistant'; text: string }[]
   >([
     {
       role: 'assistant',
-      text: 'Ask questions about your uploaded PDFs. I will answer using the chunked vectors stored in Cloudflare Vectorize.',
+      text: 'Upload a PDF document to get started. I will extract text, embed it into Cloudflare Vectorize, and answer questions using Gemini.',
     },
   ]);
 
@@ -222,7 +225,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
 
     try {
       // POST to backend — which saves to D1 and fires n8n → Google Calendar
-      const res = await api.post('/academic/deadlines', {
+      const res = await api.post('/api/academic/deadlines', {
         subject: newDL.subject,
         title: newDL.title,
         dueDate: newDL.date,
@@ -230,23 +233,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
         calendarId: studentInfo.googleAccount || 'primary',
       });
 
-      if (res.status === 200 || res.status === 201) {
-        const data = res.data as any;
-        // Swap temp id with real DB id
-        setDeadlines((prev) =>
-          prev.map((d) => (d.id === tempId ? { ...d, id: data.deadline?.id || tempId } : d)),
-        );
-        // Update automation log to success
-        setAutomations((prev) =>
-          prev.map((a) =>
-            a.id === pendingAuto.id
-              ? { ...a, status: 'success' as const, name: `Google Calendar Sync: ${newDL.subject} — ${newDL.title}` }
-              : a,
-          ),
-        );
-      } else {
-        throw new Error('Server error');
-      }
+      const data = res.data as any;
+      setDeadlines((prev) =>
+        prev.map((d) => (d.id === tempId ? { ...d, id: data.deadline?.id || tempId } : d)),
+      );
+      setAutomations((prev) =>
+        prev.map((a) =>
+          a.id === pendingAuto.id
+            ? { ...a, status: 'success' as const, name: `Google Calendar Sync: ${newDL.subject} — ${newDL.title}` }
+            : a,
+        ),
+      );
     } catch {
       // Mark automation as failed but keep deadline in UI
       setAutomations((prev) =>
@@ -363,18 +360,75 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
   };
 
   // --- Study Companion Actions ---
-  const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setPdfName(file.name);
-      setPdfUploaded(true);
+      setIsProcessing(true);
+      setCompanionChat((prev) => [
+        ...prev,
+        { role: 'assistant', text: `Processing "${file.name}" — extracting text, chunking, and embedding into Vectorize...` },
+      ]);
 
-      // Add automation log
+      try {
+        const reader = new FileReader();
+        reader.onload = async () => {
+          try {
+            const base64String = (reader.result as string).split(',')[1];
+            const res = await api.post('/api/study/upload', {
+              fileBase64: base64String,
+              fileName: file.name,
+              mimeType: file.type || 'application/pdf',
+            });
+            const data = res.data as any;
+            if (data.success && data.document) {
+              setDocumentId(data.document.id);
+              setPdfUploaded(true);
+              setCompanionChat((prev) => [
+                ...prev,
+                { role: 'assistant', text: `✅ "${file.name}" processed successfully! ${data.document.chunkCount} chunks embedded in Vectorize. Ask me anything about it.` },
+              ]);
+            } else {
+              throw new Error(data.error || 'Upload failed');
+            }
+          } catch (err: any) {
+            const msg = err.response?.data?.error || err.message || 'Failed to process PDF';
+            setCompanionChat((prev) => [
+              ...prev,
+              { role: 'assistant', text: `❌ Error: ${msg}` },
+            ]);
+          } finally {
+            setIsProcessing(false);
+          }
+        };
+        reader.onerror = () => {
+          setIsProcessing(false);
+          setCompanionChat((prev) => [
+            ...prev,
+            { role: 'assistant', text: '❌ Failed to read the file.' },
+          ]);
+        };
+        reader.readAsDataURL(file);
+      } catch (err: any) {
+        setIsProcessing(false);
+        setCompanionChat((prev) => [
+          ...prev,
+          { role: 'assistant', text: `❌ Error: ${err.message}` },
+        ]);
+      }
+
       setAutomations((prev) => [
         {
           id: Math.random().toString(),
-          name: `R2 Upload: Stored '${file.name}' + Chunks created & embedded`,
-          type: 'R2 & Vectorize',
+          name: `Gemini: Extracted text from '${file.name}'`,
+          type: 'Gemini OCR',
+          status: 'success' as const,
+          time: 'Just now',
+        },
+        {
+          id: Math.random().toString(),
+          name: `Vectorize: Embedded chunks for '${file.name}'`,
+          type: 'Vectorize Index',
           status: 'success' as const,
           time: 'Just now',
         },
@@ -385,20 +439,32 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
 
   const askCompanion = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!companionQuery.trim()) return;
+    if (!companionQuery.trim() || isAsking) return;
 
     const userText = companionQuery;
     setCompanionQuery('');
     setCompanionChat((prev) => [...prev, { role: 'user', text: userText }]);
+    setIsAsking(true);
 
     try {
-      const response = await api.post('/study/ask', { question: userText });
-      const data = response.data as any;
+      const res = await api.post('/api/study/ask', {
+        question: userText,
+        documentId,
+      });
+      const data = res.data as any;
       if (data.success) {
         setCompanionChat((prev) => [...prev, { role: 'assistant', text: data.answer }]);
+      } else {
+        setCompanionChat((prev) => [
+          ...prev,
+          { role: 'assistant', text: `❌ ${data.error || 'Failed to get answer'}` },
+        ]);
       }
-    } catch (error) {
-      setCompanionChat((prev) => [...prev, { role: 'assistant', text: 'Error fetching response.' }]);
+    } catch (err: any) {
+      const msg = err.response?.data?.error || err.message || 'Failed to get answer';
+      setCompanionChat((prev) => [...prev, { role: 'assistant', text: `❌ Error: ${msg}` }]);
+    } finally {
+      setIsAsking(false);
     }
   };
 
@@ -406,20 +472,39 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
     setFlashcards(flashcards.map((c) => (c.id === id ? { ...c, flipped: !c.flipped } : c)));
   };
 
-  const addFlashcard = (e: React.FormEvent) => {
+  const generateFlashcards = async () => {
+    if (!documentId || isGeneratingFlashcards) return;
+    setIsGeneratingFlashcards(true);
+    try {
+      const res = await api.post('/api/study/flashcards/generate', { documentId });
+      const data = res.data as any;
+      if (data.success && data.flashcards) {
+        setFlashcards(data.flashcards.map((c: any) => ({ ...c, flipped: false })));
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.error || err.message || 'Failed to generate flashcards';
+      setCompanionChat((prev) => [
+        ...prev,
+        { role: 'assistant', text: `❌ Flashcard generation failed: ${msg}` },
+      ]);
+    } finally {
+      setIsGeneratingFlashcards(false);
+    }
+  };
+
+  const addFlashcard = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newFlashcardFront.trim() || !newFlashcardBack.trim()) return;
-    setFlashcards([
-      ...flashcards,
-      {
-        id: Date.now().toString(),
-        front: newFlashcardFront,
-        back: newFlashcardBack,
-        flipped: false,
-      },
-    ]);
+    const tempId = Date.now().toString();
+    const newCard = { id: tempId, front: newFlashcardFront, back: newFlashcardBack, flipped: false };
+    setFlashcards([...flashcards, newCard]);
     setNewFlashcardFront('');
     setNewFlashcardBack('');
+    if (documentId) {
+      try {
+        await api.post('/api/study/flashcards/generate', { documentId });
+      } catch { }
+    }
   };
 
   const summarizeNotice = async (e: React.FormEvent) => {
@@ -428,32 +513,36 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
 
     setSummarizingNotice(true);
     try {
-      const response = await api.post('/notices/broadcast', { title: 'New Notice', content: collegeNotice });
-      const data = response.data as any;
-      if (data.success && data.broadcast) {
-        setNoticeSummary([data.broadcast.summary, ...data.broadcast.actionItems]);
+      const res = await api.post('/api/academic/notices/summarize', {
+        title: 'College Notice',
+        content: collegeNotice,
+      });
+      const data = res.data as {
+        summary: string;
+        actionItems: string[];
+        keyDates: { event: string; date: string }[];
+        urgency: string;
+      };
 
-        // Add to automation feed
-        setAutomations((prev) => [
-          {
-            id: Math.random().toString(),
-            name: 'Broadcast Notice: Sent Telegram circular to CS Student body',
-            type: 'n8n Webhook',
-            status: 'success' as const,
-            time: 'Just now',
-          },
-          {
-            id: Math.random().toString(),
-            name: 'Calendar Event: Notice dates mapped',
-            type: 'Google API',
-            status: 'success' as const,
-            time: 'Just now',
-          },
-          ...prev,
-        ]);
-      }
-    } catch (err) {
-      console.error(err);
+      const bullets: string[] = [
+        data.summary,
+        ...data.actionItems,
+        ...data.keyDates.map((kd) => `📅 ${kd.event}: ${kd.date}`),
+      ];
+      setNoticeSummary(bullets);
+
+      setAutomations((prev) => [
+        {
+          id: Math.random().toString(),
+          name: 'Notice summarized via backend heuristic parser',
+          type: 'Notice API',
+          status: 'success' as const,
+          time: 'Just now',
+        },
+        ...prev,
+      ]);
+    } catch {
+      setNoticeSummary(['Failed to summarize notice. Please try again.']);
     } finally {
       setSummarizingNotice(false);
     }
@@ -513,20 +602,35 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
 
     setJdMatching(true);
     try {
-      const response = await api.post('/placement/analyze', {
-        resumeText: "Mock Resume Data for testing", // normally read from resumeFile
-        jobDescription: jobDescription,
-      });
-      const data = response.data as any;
-      if (data.success && data.analysis) {
-        setJdMatchResult({
-          percentage: data.analysis.score,
-          missing: data.analysis.missingKeywords,
-          recommendations: [data.analysis.feedback],
-        });
+      let resumeText = '';
+      if (resumeFile) {
+        try {
+          resumeText = await resumeFile.text();
+        } catch {
+          resumeText = resumeFile.name;
+        }
       }
-    } catch (err) {
-      console.error(err);
+
+      const res = await api.post('/api/placement/analyze', {
+        resumeText,
+        jobDescription,
+      });
+      const data = res.data as {
+        analysis: {
+          score: number;
+          matchedKeywords: string[];
+          missingKeywords: string[];
+          feedback: string;
+        };
+      };
+
+      setJdMatchResult({
+        percentage: data.analysis.score,
+        missing: data.analysis.missingKeywords,
+        recommendations: [data.analysis.feedback],
+      });
+    } catch {
+      alert('Failed to analyze resume. Please try again.');
     } finally {
       setJdMatching(false);
     }
@@ -1262,10 +1366,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
                         type="file"
                         accept=".pdf"
                         onChange={handlePdfUpload}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        disabled={isProcessing}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
                       />
-                      <button className="px-3.5 py-1.5 bg-secondary text-secondary-foreground text-xs font-bold rounded shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all">
-                        {pdfUploaded ? 'Change PDF' : 'Upload File'}
+                      <button className="px-3.5 py-1.5 bg-secondary text-secondary-foreground text-xs font-bold rounded shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50">
+                        {isProcessing ? 'Uploading...' : (pdfUploaded ? 'Change PDF' : 'Upload File')}
                       </button>
                     </div>
                   </div>
@@ -1309,10 +1414,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
                       />
                       <button
                         type="submit"
-                        disabled={!pdfUploaded || !companionQuery.trim()}
+                        disabled={!pdfUploaded || !companionQuery.trim() || isAsking}
                         className="p-1.5 bg-secondary text-secondary-foreground rounded disabled:opacity-50 hover:bg-secondary/90 transition-colors"
                       >
-                        <Send className="w-3.5 h-3.5" />
+                        {isAsking ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                       </button>
                     </form>
                   </div>
@@ -1320,7 +1425,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
 
                 {/* Flipping Flashcards */}
                 <div className="bg-card border border-border/80 rounded-xl p-6 shadow-sm space-y-4">
-                  <h3 className="text-sm font-bold">Auto-Generated Flashcards (Flipping Cards)</h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold">Auto-Generated Flashcards (Flipping Cards)</h3>
+                    <button
+                      onClick={generateFlashcards}
+                      disabled={!documentId || isGeneratingFlashcards}
+                      className="px-3 py-1.5 bg-secondary text-secondary-foreground text-[10px] font-bold rounded shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      {isGeneratingFlashcards ? (
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-3 h-3" />
+                      )}
+                      <span>{isGeneratingFlashcards ? 'Generating...' : 'Generate from Document'}</span>
+                    </button>
+                  </div>
                   <form
                     onSubmit={addFlashcard}
                     className="p-4 bg-muted/40 rounded-lg border border-border/60 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs"

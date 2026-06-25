@@ -25,7 +25,7 @@ bunkRoutes.post('/parse-timetable', async (c) => {
     }
 
     const buffer = Buffer.from(imageBase64, 'base64');
-    const apiKey = (c.env as any)?.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+    const apiKey = (c.env as Env)?.GEMINI_API_KEY;
 
     if (!apiKey) {
       return c.json({ success: false, error: 'GEMINI_API_KEY is not configured on the server.' }, 500);
