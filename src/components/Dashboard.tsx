@@ -27,6 +27,7 @@ import {
   Copy,
   ExternalLink,
 } from 'lucide-react';
+import api from '../services/api';
 
 interface DashboardProps {
   onLogout: () => void;
@@ -404,7 +405,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
     }
   };
 
-  const askCompanion = (e: React.FormEvent) => {
+  const askCompanion = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!companionQuery.trim()) return;
 
@@ -412,22 +413,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
     setCompanionQuery('');
     setCompanionChat((prev) => [...prev, { role: 'user', text: userText }]);
 
-    // Vectorize + Gemini response mock
-    setTimeout(() => {
-      let reply =
-        'I found matching chunks in your textbooks stored in R2. According to your document: ';
-      if (userText.toLowerCase().includes('vector')) {
-        reply +=
-          'Vector embeddings translate high-dimensional context into geometric indices so LLMs can run similarity indexes instantly.';
-      } else if (userText.toLowerCase().includes('r2')) {
-        reply +=
-          'Cloudflare R2 provides cheap object store storage for PDF assets with zero egress fees, which optimizes cost when chunking large books.';
-      } else {
-        reply +=
-          'The documents indicate that utilizing distributed servers allows edge nodes to run vector queries much closer to the user with less than 20ms of latency.';
+    try {
+      const response = await api.post('/study/ask', { question: userText });
+      const data = response.data as any;
+      if (data.success) {
+        setCompanionChat((prev) => [...prev, { role: 'assistant', text: data.answer }]);
       }
-      setCompanionChat((prev) => [...prev, { role: 'assistant', text: reply }]);
-    }, 1000);
+    } catch (error) {
+      setCompanionChat((prev) => [...prev, { role: 'assistant', text: 'Error fetching response.' }]);
+    }
   };
 
   const toggleFlashcard = (id: string) => {
@@ -450,38 +444,41 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
     setNewFlashcardBack('');
   };
 
-  const summarizeNotice = (e: React.FormEvent) => {
+  const summarizeNotice = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!collegeNotice.trim()) return;
 
     setSummarizingNotice(true);
-    setTimeout(() => {
-      setSummarizingNotice(false);
-      setNoticeSummary([
-        '⚠️ Mid-term examinations commence July 15th, 2026. Admit card download starts July 5th.',
-        '📋 Hard copy submissions of all practical laboratory journals are due before July 10th at the main branch office.',
-        '🚫 Late submissions will result in a 25% internal grading deduction.',
-      ]);
+    try {
+      const response = await api.post('/notices/broadcast', { title: 'New Notice', content: collegeNotice });
+      const data = response.data as any;
+      if (data.success && data.broadcast) {
+        setNoticeSummary([data.broadcast.summary, ...data.broadcast.actionItems]);
 
-      // Add to automation feed
-      setAutomations((prev) => [
-        {
-          id: Math.random().toString(),
-          name: 'Broadcast Notice: Sent Telegram circular to CS Student body',
-          type: 'n8n Webhook',
-          status: 'success' as const,
-          time: 'Just now',
-        },
-        {
-          id: Math.random().toString(),
-          name: 'Calendar Event: Mid-term Exams dates mapped',
-          type: 'Google API',
-          status: 'success' as const,
-          time: 'Just now',
-        },
-        ...prev,
-      ]);
-    }, 1200);
+        // Add to automation feed
+        setAutomations((prev) => [
+          {
+            id: Math.random().toString(),
+            name: 'Broadcast Notice: Sent Telegram circular to CS Student body',
+            type: 'n8n Webhook',
+            status: 'success' as const,
+            time: 'Just now',
+          },
+          {
+            id: Math.random().toString(),
+            name: 'Calendar Event: Notice dates mapped',
+            type: 'Google API',
+            status: 'success' as const,
+            time: 'Just now',
+          },
+          ...prev,
+        ]);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSummarizingNotice(false);
+    }
   };
 
   // --- Placement Prep Actions ---
@@ -532,23 +529,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout, studentInfo }) =
     });
   };
 
-  const matchResumeWithJd = (e: React.FormEvent) => {
+  const matchResumeWithJd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!jobDescription.trim()) return;
 
     setJdMatching(true);
-    setTimeout(() => {
-      setJdMatching(false);
-      setJdMatchResult({
-        percentage: 78,
-        missing: ['System Design', 'Redis Caching', 'Cloudflare Workers/Edge APIs'],
-        recommendations: [
-          'Detail your experience with high-performance vector searching on edge configurations.',
-          'Inject terms like "Egress cost optimization" and "Distributed cache integration" in your resume project notes.',
-          'Elaborate on database schema indexes and n8n webhook pipelines.',
-        ],
+    try {
+      const response = await api.post('/placement/analyze', {
+        resumeText: "Mock Resume Data for testing", // normally read from resumeFile
+        jobDescription: jobDescription,
       });
-    }, 1500);
+      const data = response.data as any;
+      if (data.success && data.analysis) {
+        setJdMatchResult({
+          percentage: data.analysis.score,
+          missing: data.analysis.missingKeywords,
+          recommendations: [data.analysis.feedback],
+        });
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setJdMatching(false);
+    }
   };
 
   return (

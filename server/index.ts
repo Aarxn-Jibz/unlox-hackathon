@@ -46,7 +46,7 @@ baseApp.onError((err, c) => {
 
 // Chain all routes to preserve their type information for Hono RPC
 const app = baseApp
-  .route('/', authRouter)
+  .route('/api', authRouter)
   .route('/api/academic', academicRouter)
   .route('/api/tasks', tasksRoutes)
   .route('/api/study', studyRoutes)
